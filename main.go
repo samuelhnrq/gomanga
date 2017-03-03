@@ -41,7 +41,24 @@ var Substituir = false
 func main() {
 	handleArgs()
 	defaults()
-	download(buildURL())
+	if strings.Contains(Capitulo, "-") {
+		strRang := strings.Split(Capitulo, "-")
+		first, err := strconv.Atoi(strRang[0])
+		last, err2 := strconv.Atoi(strRang[1])
+		handle(err, err2)
+		log.Println("Conjunto de Capitulos do", first, "ao", last, "especificados para dowload.")
+		for ; first <= last; first++ {
+			if first < 10 {
+				Capitulo = "0" + strconv.Itoa(first)
+			} else {
+				Capitulo = strconv.Itoa(first)
+			}
+			log.Println("Iniciando o download do capitulo", first)
+			download(buildURL())
+		}
+	} else {
+		download(buildURL())
+	}
 	log.Println("Obrigado por usar!")
 }
 
@@ -86,7 +103,17 @@ func handleArgs() {
 			checkEmpty()
 			capNum, err := strconv.Atoi(val)
 			if err != nil || capNum <= 0 {
+				pagRange := strings.Split(val, "-")
+				if len(pagRange) == 2 {
+					first, err1 := strconv.Atoi(pagRange[0])
+					second, err2 := strconv.Atoi(pagRange[1])
+					if err1 == nil && err2 == nil {
+						Capitulo = strconv.Itoa(first) + "-" + strconv.Itoa(second)
+						break
+					}
+				}
 				log.Fatal("Numero de Capitulo invalido")
+
 			}
 			if capNum < 10 {
 				Capitulo = "0" + strconv.Itoa(capNum)
@@ -140,9 +167,11 @@ func buildURL() string {
 }
 
 // handle é uma função para facilitar tratar de erros indesejados e evitar verbosidade
-func handle(err error) {
-	if err != nil {
-		log.Fatal(err.Error())
+func handle(erros ...error) {
+	for _, err := range erros {
+		if err != nil {
+			log.Fatal(err.Error())
+		}
 	}
 }
 
@@ -151,7 +180,17 @@ func download(url string) {
 	log.Println("Baixando lista de páginas do capitulo", Capitulo, "para download.")
 	resh, err := goquery.NewDocument(url)
 	handle(err)
-
+	if resh.Url.Path == "/index.php" {
+		log.Println("Não foi possivel encontrar o mangá. Determinando o problema.")
+		bc := Capitulo
+		Capitulo = ""
+		resh, err = goquery.NewDocument(buildURL())
+		if resh.Url.Path == "/index.php" {
+			log.Fatal("Mangá ", MangaAtual, " não existe")
+		} else {
+			log.Fatal("Capitulo ", bc, " não existe")
+		}
+	}
 	paginas := resh.Find("img.img-responsive")
 	log.Println(paginas.Length()-3, "páginas encontradas, disponiveis pra download")
 	pageNum := 1
@@ -165,7 +204,7 @@ func download(url string) {
 			return
 		}
 
-		local := Pasta + MangaAtual + "/Capitulo " + Capitulo
+		local := Pasta + MangaAtual + "/Capitulo-" + Capitulo
 		err = os.MkdirAll(local, 0777)
 		handle(err)
 		local += string(imgURL[strings.LastIndex(imgURL, "/"):])
