@@ -27,7 +27,7 @@ const UNIONMANGAS = "http://unionmangas.net/leitor"
 var Provider = ""
 
 //Pasta é a localização dos downloads
-var Pasta = "./Manga/"
+var Pasta = "./gomanga/"
 
 // MangaAtual é o nome do manga dessa vez
 var MangaAtual = ""
@@ -35,10 +35,14 @@ var MangaAtual = ""
 // Capitulo é o Capitulo atual
 var Capitulo = ""
 
+// Substituir é a que controla se arquivos existentes devem ser substituidos
+var Substituir = false
+
 func main() {
 	handleArgs()
 	defaults()
 	download(buildURL())
+	log.Println("Obrigado por usar!")
 }
 
 func handleArgs() {
@@ -46,27 +50,39 @@ func handleArgs() {
 	var opt, val string
 	checkEmpty := func() {
 		if val == "" {
-			log.Fatal("Argumento ", opt, " exige um valor")
+			log.Fatal("Argumento", opt, "exige um valor")
 		}
 	}
-	for i := 0; i < len(args); i++ {
-		if string(args[i][0]) != "-" {
+	for len(args) > 0 {
+		if string(args[0][0]) != "-" {
 			log.Fatal("Argumento perdido")
 		}
-		opt = string(args[i][1:])
-		if string(args[i+1][0]) != "-" {
-			val = args[i+1]
-			args = args[2:]
+		opt = string(args[0][1:])
+		if len(args) > 1 {
+			if string(args[1][0]) != "-" {
+				val = args[1]
+				args = args[2:]
+			} else {
+				val = ""
+				args = args[1:]
+			}
 		} else {
 			val = ""
 			args = args[1:]
 		}
 		switch opt {
-		case "m", "manga":
+		case "m", "-manga":
 			checkEmpty()
-			strings.Replace(val, " ", "_", -1)
+			//FIXME: Bem ineficiente, trocar por um split
+			new := ""
+			val = strings.Replace(val, " ", "_", 10)
+			for _, st := range strings.Split(val, "_") {
+				new += strings.Title(st) + "_"
+			}
+			new = string(new[:len(new)-1])
+			val = new
 			MangaAtual = val
-		case "c", "capitulo":
+		case "c", "-capitulo":
 			checkEmpty()
 			capNum, err := strconv.Atoi(val)
 			if err != nil || capNum <= 0 {
@@ -77,6 +93,8 @@ func handleArgs() {
 			} else {
 				Capitulo = strconv.Itoa(capNum)
 			}
+		case "r", "-substituir":
+			Substituir = true
 		}
 		opt, val = "", ""
 	}
@@ -87,7 +105,9 @@ func defaults() {
 		Provider = UNIONMANGAS
 	}
 	if MangaAtual == "" {
-		log.Fatal("Manga precisa ser especificado")
+		log.Println("Manga precisa ser especificado.")
+		log.Println("Use '_' para espaços. Precisa ser o mesmo nome da URL do manga. Não diferencia maiscula ou minuscula.")
+		log.Fatal("ex: gomanga -m [nome_manga]")
 	}
 	if Capitulo == "" {
 		Capitulo = acharUltimoCap()
@@ -97,14 +117,17 @@ func defaults() {
 func acharUltimoCap() string {
 	doc, err := goquery.NewDocument(buildURL())
 	handle(err)
+	log.Println("Capitulo não especificado, baixando lista para verificar o ultimo.")
 	last, exist := doc.Find("#cap_manga1").Children().Last().Attr("value")
 	if !exist {
 		log.Fatal("Mudança por parte da union mangas. Terei que atualizar meu codigo")
 	}
+	log.Println("O ultimo capitulo disponivel é o " + last)
 
 	return last
 }
 
+// Constroi a URL final, função presisaava ser refeita para aceitar varios
 func buildURL() string {
 	var url bytes.Buffer
 
@@ -116,56 +139,55 @@ func buildURL() string {
 	return url.String()
 }
 
+// handle é uma função para facilitar tratar de erros indesejados e evitar verbosidade
 func handle(err error) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 }
 
+// download é o que parece ser. Baixa o mangá, dada a URL, tinha que ser refeito com goquery
 func download(url string) {
-	resh, err := http.Get(url)
+	log.Println("Baixando lista de páginas do capitulo", Capitulo, "para download.")
+	resh, err := goquery.NewDocument(url)
 	handle(err)
-	defer resh.Body.Close()
 
-	res, err := html.Parse(resh.Body)
-	handle(err)
-	paginas := acharKey(res, "img", "class", "img-responsive")
+	paginas := resh.Find("img.img-responsive")
+	log.Println(paginas.Length()-3, "páginas encontradas, disponiveis pra download")
 	pageNum := 1
-	for _, pag := range paginas {
-		var imgUrl string
-		for _, atr := range pag.Attr {
-			if atr.Key == "data-lazy" {
-				imgUrl = atr.Val
-				break
-			}
+	paginas = paginas.Each(func(a int, sel *goquery.Selection) {
+		imgURL, exis := sel.Attr("data-lazy")
+		if !exis {
+			println("URL de imagens não foi encontrada.")
+			return
 		}
-		if strings.Contains(imgUrl, "http://unionmangas.net/images") || strings.Contains(imgUrl, ".gif") {
-			continue
+		if strings.Contains(imgURL, "http://unionmangas.net/images") || strings.Contains(imgURL, ".gif") {
+			return
 		}
 
-		img, err := http.Get(imgUrl)
-		handle(err)
-		defer img.Body.Close()
-
-		local := Pasta + MangaAtual
+		local := Pasta + MangaAtual + "/Capitulo " + Capitulo
 		err = os.MkdirAll(local, 0777)
 		handle(err)
-		if pageNum < 10 {
-			local += "/Pagina0"
-		} else {
-			local += "/Pagina"
-		}
-		local += strconv.Itoa(pageNum) + string(imgUrl[strings.LastIndex(imgUrl, "."):])
+		local += string(imgURL[strings.LastIndex(imgURL, "/"):])
 		pageNum++
-		file, err := os.Create(local)
+		file, err := os.Open(local)
+		if os.IsNotExist(err) || Substituir {
+			file, err = os.Create(local)
+		} else if err == nil {
+			log.Println("Arquivo/Pagina", pageNum-1, "já existe... Pulando...")
+			return
+		}
+
+		img, err := http.Get(imgURL)
 		handle(err)
+		defer img.Body.Close()
 
 		log.Printf("Baixando a pagina %d ", pageNum-1)
 
 		_, err = io.Copy(file, img.Body)
 		handle(err)
 		file.Close()
-	}
+	})
 }
 
 // acharKey encontra e retorna os nodes que se encaixam com os valores
