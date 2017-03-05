@@ -20,6 +20,9 @@ var Pasta = "./gomanga/"
 // Substituir é a que controla se arquivos existentes devem ser substituidos
 var Substituir = false
 
+// Espacos dita se os caminhos das imagems devem conter espaços
+var Espacos = false
+
 func main() {
 	handleArgs()
 	defaults()
@@ -50,9 +53,18 @@ func main() {
 func handleArgs() {
 	args := os.Args[1:]
 	var opt, val string
+	if len(args) == 0 {
+		ajuda()
+		os.Exit(0)
+	}
 	checkEmpty := func() {
 		if val == "" {
 			log.Fatal("Argumento", opt, "exige um valor")
+		}
+	}
+	precisaVazio := func() {
+		if val != "" {
+			log.Fatal("Argumento", opt, "não aceita valor algum deve ser usado sozinho.")
 		}
 	}
 	for len(args) > 0 {
@@ -93,7 +105,11 @@ func handleArgs() {
 				providers.Capitulo = strconv.Itoa(capNum)
 			}
 		case "r", "-substituir":
+			precisaVazio()
 			Substituir = true
+		case "s", "-espacos":
+			precisaVazio()
+			Espacos = true
 		}
 		opt, val = "", ""
 	}
@@ -125,20 +141,26 @@ func handle(erros ...error) {
 func download() {
 	log.Println("Baixando lista de páginas do capitulo", providers.Capitulo, "para download.")
 	imgs := Provedor.ListImgURL()
+	local := Pasta
+	if Espacos {
+		local += strings.Replace(providers.MangaAtual, "_", " ", -1)
+	} else {
+		local += providers.MangaAtual
+	}
+	local += "/Capitulo-" + providers.Capitulo + "/"
+	err := os.MkdirAll(local, 0777)
+	handle(err)
 	for i, imgURL := range imgs {
-		local := Pasta + providers.MangaAtual + "/Capitulo-" + providers.Capitulo + "/"
-		err := os.MkdirAll(local, 0777)
-		handle(err)
 		imgName := "Pagina_"
-		if i < 10 {
+		if i+1 < 10 {
 			imgName += "0"
 		}
-		imgName += strconv.Itoa(i)
+		imgName += strconv.Itoa(i + 1)
 		imgName += string(imgURL[strings.LastIndex(imgURL, "."):])
-		local += imgName
-		file, err := os.Open(local)
+		imgFile := local + imgName
+		file, err := os.Open(imgFile)
 		if os.IsNotExist(err) || Substituir {
-			file, err = os.Create(local)
+			file, err = os.Create(imgFile)
 		} else if err == nil {
 			log.Println("Arquivo", imgName, "já existe... Pulando...")
 			continue

@@ -9,13 +9,6 @@ import (
 
 const unionMangasURL = "http://unionmangas.net/leitor"
 
-/*quick clue for implementation
-type Provedor interface {
-  GerarURL() string
-  TtlCapitulos() int
-  Download()
-}*/
-
 /*Note to self:
     A good design is to make your type unexported, but provide an exported constructor function like NewMyType()
 in which you can properly initialize your struct / type. Also return an interface type and not a concrete type,
