@@ -5,6 +5,7 @@ import "log"
 // provedor é uma interface para unificar os diferentes provedores
 type provedor interface {
 	GerarURL() string
+	PesquisarTitulos(manga string) []string
 	TTLCapitulos() string
 	ListImgURL() []string
 }

@@ -12,7 +12,7 @@ gomanga [-c numero_do_capitulo] [-r] [-s] -m Nome_Manga
 ```
 - Nome_manga é o mesmo da url do site da union mangas pro mangá desejado. Exemplo, Dragon Ball capitulo 20 seria: `gomanga  -c 20 -m Dragon_Ball`
 - Os mangás são sempre salvos em `./gomangas/{Nome_manga}/Capitulo{NumCapitulo}/`
-- A maioria dos nomes é bem obvil. E não diferenciam maiuscula e minuscula.
+- A maioria dos nomes é bem obvil. E não diferenciam maiuscula e minuscula. Use '_' pra espaços, ou coloque o nome do mangá entre aspas.
 - Ordem dos argumentos não faz diferença
 - A opção 'c' pode ser ou um numero ou um intervalo de capitulos. ex: `-c 9` ou `-c 5-9`
 - A opção 'r' baixa e substitui mesmo se os arquivos já existirem.

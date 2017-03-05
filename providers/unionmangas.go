@@ -1,10 +1,14 @@
 package providers
 
 import (
+	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/antonholmquist/jason"
 )
 
 const unionMangasURL = "http://unionmangas.net/leitor"
@@ -35,27 +39,30 @@ func (u *unionMangas) errNotFound() {
 }
 
 func (u *unionMangas) formatarNome() {
-	if u.nomeMangaFormatada == MangaAtual {
-		return
-	}
-	new := ""
-	val := strings.Replace(MangaAtual, " ", "_", 10)
-	for _, st := range strings.Split(val, "_") {
-		if st != "of" && st != "and" {
-			new += strings.Title(st) + "_"
-		} else {
-			new += st + "_"
+	if u.nomeMangaFormatada != MangaAtual {
+		new := ""
+		val := strings.Replace(MangaAtual, " ", "_", 10)
+		for _, st := range strings.Split(val, "_") {
+			if st != "of" && st != "and" {
+				new += strings.Title(st) + "_"
+			} else {
+				new += st + "_"
+			}
 		}
+		new = string(new[:len(new)-1])
+		u.nomeMangaFormatada = new
+		MangaAtual = new
 	}
-	new = string(new[:len(new)-1])
-	u.nomeMangaFormatada = new
-	MangaAtual = new
 }
 
 //GerarURL retorna a url da union Mangas
 func (u *unionMangas) GerarURL() string {
 	u.formatarNome()
-	return unionMangasURL + "/" + u.nomeMangaFormatada + "/" + string(Capitulo)
+	capNum, err := strconv.Atoi(Capitulo)
+	if err != nil {
+		log.Fatalf("%s não é um numero de capitulo válido", Capitulo)
+	}
+	return fmt.Sprintf("%s/%s/%02d", unionMangasURL, u.nomeMangaFormatada, capNum)
 }
 
 func (u *unionMangas) ListImgURL() []string {
@@ -88,8 +95,30 @@ func (u *unionMangas) TTLCapitulos() string {
 	handle(err)
 	last, exist := doc.Find("#cap_manga1").Children().Last().Attr("value")
 	if !exist {
-		log.Fatal("Mudança por parte da union mangas. Terei que atualizar meu codigo")
+		log.Fatal("Mangá especificado não existe.")
 	}
 
 	return last
+}
+
+func (u *unionMangas) PesquisarTitulos(manga string) []string {
+	// Constroi a url e a variavel pra receber o valor final
+	jsonRes, err := http.Get("http://unionmangas.net/assets/busca.php?q=" + manga)
+	handle(err)
+	defer jsonRes.Body.Close()
+
+	res, err := jason.NewObjectFromReader(jsonRes.Body)
+	handle(err)
+
+	temp := make([]string, 0)
+	values, err := res.GetObjectArray("items")
+	handle(err)
+
+	for _, mangaObj := range values {
+		mangaTitle, err := mangaObj.GetString("titulo")
+		handle(err)
+		temp = append(temp, mangaTitle)
+	}
+
+	return temp
 }

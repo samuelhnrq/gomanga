@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -35,11 +37,7 @@ func main() {
 		}
 		log.Println("Conjunto de capitulos do", first, "ao", last, "especificados para dowload.")
 		for ; first <= last; first++ {
-			if first < 10 {
-				providers.Capitulo = "0" + strconv.Itoa(first)
-			} else {
-				providers.Capitulo = strconv.Itoa(first)
-			}
+			providers.Capitulo = fmt.Sprintf("%d", first)
 			log.Println("Iniciando o download do capitulo", first)
 			download()
 			log.Println("Download do capitulo", first, "completo com sucesso")
@@ -51,74 +49,56 @@ func main() {
 }
 
 func handleArgs() {
-	args := os.Args[1:]
-	var opt, val string
-	if len(args) == 0 {
-		ajuda()
+	flag.StringVar(&providers.MangaAtual, "m", "", "Especifica o nome do `mangá` a ser baixado")
+	flag.BoolVar(&Substituir, "r", false, "Substitui arquivos existentes")
+	flag.BoolVar(&Espacos, "s", false, "Coloca espaços no nome da pasta")
+	capt := flag.Int("c", 0, "Numero do `capitulo`. 0 para o mais novo.")
+	help := flag.Bool("h", false, "Mostra essa ajuda e sai(exclusivo)")
+	pesquisa := flag.String("p", "", "Pesiquisa `mangá` mostra resultados e sai(exclusivo)")
+
+	flag.Parse()
+	if flag.NArg() > 0 {
+		log.Fatal("Argumento perdido sem operador.")
+	}
+
+	if *pesquisa != "" && !*help {
+		search(*pesquisa)
 		os.Exit(0)
 	}
-	checkEmpty := func() {
-		if val == "" {
-			log.Fatal("Argumento", opt, "exige um valor")
-		}
+	if *help || providers.MangaAtual == "" {
+		fmt.Println("Uso: gomanga [-s] [-r] [-c <num_manga>] -m \"Nome Manga\" OU",
+			"gomanga -p \"pesquisa\"")
+		flag.PrintDefaults()
+		fmt.Println("Operadores exclusivos, são usados sozinhos e inibem o funcionamento dos outros.")
+		os.Exit(0)
 	}
-	precisaVazio := func() {
-		if val != "" {
-			log.Fatal("Argumento", opt, "não aceita valor algum deve ser usado sozinho.")
-		}
+	if *capt < 0 {
+		log.Fatal("Numero de capitulo invalido")
+	} else if *capt == 0 {
+		providers.Capitulo = ""
+	} else {
+		providers.Capitulo = strconv.Itoa(*capt)
 	}
-	for len(args) > 0 {
-		if string(args[0][0]) != "-" {
-			log.Fatal("Argumento perdido")
-		}
-		opt = string(args[0][1:])
-		if len(args) > 1 {
-			if string(args[1][0]) != "-" {
-				val = args[1]
-				args = args[2:]
-			} else {
-				val = ""
-				args = args[1:]
-			}
-		} else {
-			val = ""
-			args = args[1:]
-		}
-		switch opt {
-		case "m", "-manga":
-			checkEmpty()
-			providers.MangaAtual = val
-		case "c", "-capitulo":
-			checkEmpty()
-			if strings.Contains(val, "-") {
-				providers.Capitulo = val
-				break
-			}
-			capNum := 0
-			capNum, err := strconv.Atoi(val)
-			if err != nil || capNum <= 0 {
-				log.Fatal("Numero de Capitulo invalido")
-			}
-			if capNum < 10 {
-				providers.Capitulo = "0" + strconv.Itoa(capNum)
-			} else {
-				providers.Capitulo = strconv.Itoa(capNum)
-			}
-		case "r", "-substituir":
-			precisaVazio()
-			Substituir = true
-		case "s", "-espacos":
-			precisaVazio()
-			Espacos = true
-		}
-		opt, val = "", ""
+}
+
+func search(manga string) {
+	log.Println("Enviando pesquisa ao servidor.")
+	mangas := Provedor.PesquisarTitulos(manga)
+	if len(mangas) == 0 {
+		log.Println("Nenhum mangá encontrado.")
+		return
+	}
+	log.Println("Mangás encontrados:")
+	for i, v := range mangas {
+		fmt.Printf("  - %02d) %s\n", i+1, v)
 	}
 }
 
 func defaults() {
 	if providers.MangaAtual == "" {
 		log.Println("Manga precisa ser especificado.")
-		log.Println("Use '_' para espaços. Precisa ser o mesmo nome da URL do manga. Não diferencia maiscula ou minuscula.")
+		log.Println("Use '_' para espaços, ou coloque o nome do mangá entre aspas. Precisa ser o mesmo nome da URL do manga.",
+			"Não diferencia maiscula ou minuscula.")
 		log.Fatal("ex: gomanga -m [nome_manga]")
 	}
 	if providers.Capitulo == "" {
