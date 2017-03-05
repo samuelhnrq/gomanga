@@ -1,39 +1,21 @@
 package main
 
 import (
+	"io"
 	"log"
-
 	"net/http"
-
+	"os"
+	"strconv"
 	"strings"
 
-	"os"
-
-	"io"
-
-	"bytes"
-
-	"strconv"
-
-	"golang.org/x/net/html"
-
-	"github.com/PuerkitoBio/goquery"
+	"github.com/samosaara/gomanga/providers"
 )
 
-//UNIONMANGAS é a URL
-const UNIONMANGAS = "http://unionmangas.net/leitor"
-
-//Provider é o URL atual
-var Provider = ""
+//Provedor é a URL
+var Provedor = providers.UnionMangas
 
 //Pasta é a localização dos downloads
 var Pasta = "./gomanga/"
-
-// MangaAtual é o nome do manga dessa vez
-var MangaAtual = ""
-
-// Capitulo é o Capitulo atual
-var Capitulo = ""
 
 // Substituir é a que controla se arquivos existentes devem ser substituidos
 var Substituir = false
@@ -41,23 +23,26 @@ var Substituir = false
 func main() {
 	handleArgs()
 	defaults()
-	if strings.Contains(Capitulo, "-") {
-		strRang := strings.Split(Capitulo, "-")
+	if strings.Contains(providers.Capitulo, "-") {
+		strRang := strings.Split(providers.Capitulo, "-")
 		first, err := strconv.Atoi(strRang[0])
 		last, err2 := strconv.Atoi(strRang[1])
-		handle(err, err2)
-		log.Println("Conjunto de Capitulos do", first, "ao", last, "especificados para dowload.")
+		if err != nil || err2 != nil {
+			log.Fatal("Intervalo de capitulos invalido")
+		}
+		log.Println("Conjunto de capitulos do", first, "ao", last, "especificados para dowload.")
 		for ; first <= last; first++ {
 			if first < 10 {
-				Capitulo = "0" + strconv.Itoa(first)
+				providers.Capitulo = "0" + strconv.Itoa(first)
 			} else {
-				Capitulo = strconv.Itoa(first)
+				providers.Capitulo = strconv.Itoa(first)
 			}
 			log.Println("Iniciando o download do capitulo", first)
-			download(buildURL())
+			download()
+			log.Println("Download do capitulo", first, "completo com sucesso")
 		}
 	} else {
-		download(buildURL())
+		download()
 	}
 	log.Println("Obrigado por usar!")
 }
@@ -90,35 +75,22 @@ func handleArgs() {
 		switch opt {
 		case "m", "-manga":
 			checkEmpty()
-			//FIXME: Bem ineficiente, trocar por um split
-			new := ""
-			val = strings.Replace(val, " ", "_", 10)
-			for _, st := range strings.Split(val, "_") {
-				new += strings.Title(st) + "_"
-			}
-			new = string(new[:len(new)-1])
-			val = new
-			MangaAtual = val
+			providers.MangaAtual = val
 		case "c", "-capitulo":
 			checkEmpty()
+			if strings.Contains(val, "-") {
+				providers.Capitulo = val
+				break
+			}
+			capNum := 0
 			capNum, err := strconv.Atoi(val)
 			if err != nil || capNum <= 0 {
-				pagRange := strings.Split(val, "-")
-				if len(pagRange) == 2 {
-					first, err1 := strconv.Atoi(pagRange[0])
-					second, err2 := strconv.Atoi(pagRange[1])
-					if err1 == nil && err2 == nil {
-						Capitulo = strconv.Itoa(first) + "-" + strconv.Itoa(second)
-						break
-					}
-				}
 				log.Fatal("Numero de Capitulo invalido")
-
 			}
 			if capNum < 10 {
-				Capitulo = "0" + strconv.Itoa(capNum)
+				providers.Capitulo = "0" + strconv.Itoa(capNum)
 			} else {
-				Capitulo = strconv.Itoa(capNum)
+				providers.Capitulo = strconv.Itoa(capNum)
 			}
 		case "r", "-substituir":
 			Substituir = true
@@ -128,42 +100,16 @@ func handleArgs() {
 }
 
 func defaults() {
-	if Provider == "" {
-		Provider = UNIONMANGAS
-	}
-	if MangaAtual == "" {
+	if providers.MangaAtual == "" {
 		log.Println("Manga precisa ser especificado.")
 		log.Println("Use '_' para espaços. Precisa ser o mesmo nome da URL do manga. Não diferencia maiscula ou minuscula.")
 		log.Fatal("ex: gomanga -m [nome_manga]")
 	}
-	if Capitulo == "" {
-		Capitulo = acharUltimoCap()
+	if providers.Capitulo == "" {
+		log.Println("Capitulo não especificado, baixando lista para verificar o ultimo disponivel")
+		providers.Capitulo = Provedor.TTLCapitulos()
+		log.Println(providers.Capitulo, " é o ultimo capitulo disponivel")
 	}
-}
-
-func acharUltimoCap() string {
-	doc, err := goquery.NewDocument(buildURL())
-	handle(err)
-	log.Println("Capitulo não especificado, baixando lista para verificar o ultimo.")
-	last, exist := doc.Find("#cap_manga1").Children().Last().Attr("value")
-	if !exist {
-		log.Fatal("Mudança por parte da union mangas. Terei que atualizar meu codigo")
-	}
-	log.Println("O ultimo capitulo disponivel é o " + last)
-
-	return last
-}
-
-// Constroi a URL final, função presisaava ser refeita para aceitar varios
-func buildURL() string {
-	var url bytes.Buffer
-
-	url.WriteString(Provider)
-	url.WriteString("/")
-	url.WriteString(MangaAtual)
-	url.WriteString("/")
-	url.WriteString(Capitulo)
-	return url.String()
 }
 
 // handle é uma função para facilitar tratar de erros indesejados e evitar verbosidade
@@ -175,73 +121,39 @@ func handle(erros ...error) {
 	}
 }
 
-// download é o que parece ser. Baixa o mangá, dada a URL, tinha que ser refeito com goquery
-func download(url string) {
-	log.Println("Baixando lista de páginas do capitulo", Capitulo, "para download.")
-	resh, err := goquery.NewDocument(url)
-	handle(err)
-	if resh.Url.Path == "/index.php" {
-		log.Println("Não foi possivel encontrar o mangá. Determinando o problema.")
-		bc := Capitulo
-		Capitulo = ""
-		resh, err = goquery.NewDocument(buildURL())
-		if resh.Url.Path == "/index.php" {
-			log.Fatal("Mangá ", MangaAtual, " não existe")
-		} else {
-			log.Fatal("Capitulo ", bc, " não existe")
-		}
-	}
-	paginas := resh.Find("img.img-responsive")
-	log.Println(paginas.Length()-3, "páginas encontradas, disponiveis pra download")
-	pageNum := 1
-	paginas = paginas.Each(func(a int, sel *goquery.Selection) {
-		imgURL, exis := sel.Attr("data-lazy")
-		if !exis {
-			println("URL de imagens não foi encontrada.")
-			return
-		}
-		if strings.Contains(imgURL, "http://unionmangas.net/images") || strings.Contains(imgURL, ".gif") {
-			return
-		}
-
-		local := Pasta + MangaAtual + "/Capitulo-" + Capitulo
-		err = os.MkdirAll(local, 0777)
+// download é o que parece ser. Baixa o mangá, dada a lista de URLs proveniente do provedor
+func download() {
+	log.Println("Baixando lista de páginas do capitulo", providers.Capitulo, "para download.")
+	imgs := Provedor.ListImgURL()
+	for i, imgURL := range imgs {
+		local := Pasta + providers.MangaAtual + "/Capitulo-" + providers.Capitulo + "/"
+		err := os.MkdirAll(local, 0777)
 		handle(err)
-		local += string(imgURL[strings.LastIndex(imgURL, "/"):])
-		pageNum++
+		imgName := "Pagina_"
+		if i < 10 {
+			imgName += "0"
+		}
+		imgName += strconv.Itoa(i)
+		imgName += string(imgURL[strings.LastIndex(imgURL, "."):])
+		local += imgName
 		file, err := os.Open(local)
 		if os.IsNotExist(err) || Substituir {
 			file, err = os.Create(local)
 		} else if err == nil {
-			log.Println("Arquivo/Pagina", pageNum-1, "já existe... Pulando...")
-			return
+			log.Println("Arquivo", imgName, "já existe... Pulando...")
+			continue
 		}
 
 		img, err := http.Get(imgURL)
 		handle(err)
-		defer img.Body.Close()
 
-		log.Printf("Baixando a pagina %d ", pageNum-1)
+		log.Print("Baixando a ", imgName, "...")
 
 		_, err = io.Copy(file, img.Body)
 		handle(err)
 		file.Close()
-	})
-}
+		img.Body.Close()
 
-// acharKey encontra e retorna os nodes que se encaixam com os valores
-func acharKey(n *html.Node, tag string, prop string, valor string) []html.Node {
-	finalSlice := make([]html.Node, 0)
-	if n.Type == html.ElementNode && n.Data == tag {
-		for _, a := range n.Attr {
-			if a.Key == prop && (a.Val == valor || strings.Contains(a.Val, valor)) {
-				finalSlice = append(finalSlice, *n)
-				continue
-			}
-		}
+		log.Println("Download da", imgName, "completo com sucesso")
 	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		finalSlice = append(finalSlice, acharKey(c, tag, prop, valor)...)
-	}
-	return finalSlice
 }
