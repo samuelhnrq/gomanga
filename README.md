@@ -7,6 +7,9 @@ go get github.com/samosaara/gomanga
 ```
 
 ## Usagem
+Existem os argumentos de download e os argumentos de uso exclusivo que devem ser usados sozinhos.
+
+### Download
 ``` 
 gomanga [-c numero_do_capitulo] [-r] [-s] -m Nome_Manga
 ```
@@ -18,5 +21,9 @@ gomanga [-c numero_do_capitulo] [-r] [-s] -m Nome_Manga
 - A opção 'r' baixa e substitui mesmo se os arquivos já existirem.
 - A opção 's' salva coloca espaços em vez de underlines no nome das pastas dos mangás
 
-### Inspiração e agradecimentos:
+### Exclusivos
+- A opção 'p' em conjunto com uma string pesquisa o mangá dos provedores disponiveis.
+- Falta de opções ou a opção 'h' mostra a ajuda
+
+## Inspiração e agradecimentos:
 [kumroute/unionmangas](https://github.com/kumroute/unionmangas)
