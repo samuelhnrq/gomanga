@@ -90,6 +90,7 @@ func (u *unionMangas) ListImgURL() []string {
 
 //TtlCapitulos retorna o total de capitulos disponiveis
 func (u *unionMangas) TTLCapitulos() string {
+	bak := Capitulo
 	Capitulo = "01"
 	doc, err := goquery.NewDocument(u.GerarURL())
 	handle(err)
@@ -98,6 +99,7 @@ func (u *unionMangas) TTLCapitulos() string {
 		log.Fatal("Mangá especificado não existe.")
 	}
 
+	Capitulo = bak
 	return last
 }
 
@@ -121,4 +123,8 @@ func (u *unionMangas) PesquisarTitulos(manga string) []string {
 	}
 
 	return temp
+}
+
+func (u *unionMangas) Nome() string {
+	return "UnionMangas"
 }
