@@ -82,21 +82,51 @@ func (u *mangaHost) ListImgURL() []string {
 		}
 		if line[:len(bullseye)] == bullseye {
 			bullseye = line[15 : len(line)-3]
+			bullseye = strings.Replace(bullseye, "\",\"", " \n", -1)
 			break
 		}
 	}
 	resh, err = goquery.NewDocumentFromReader(bytes.NewReader([]byte(bullseye)))
 	handle(err)
 	paginas := resh.Find("img[id]")
-	log.Println(paginas.Length(), "páginas encontradas, disponiveis pra download")
+	log.Println(paginas.Length(), "páginas encontradas, disponiveis, possiveis duplicadas. Filtrando.")
+	uniqPages := make(map[string]string)
 	paginas = paginas.Each(func(a int, sel *goquery.Selection) {
 		imgURL, exis := sel.Attr("src")
 		if !exis {
 			log.Panic("Mudança no layout. propriedadade src nao contem mais a URL no MangaHost. Mande um commit com isso")
 			return
 		}
-		urls = append(urls, imgURL)
+		// Filtra a URL pra pegar o nome do arquivo sem qualquer extenção
+		noExtName := imgURL[strings.LastIndex(imgURL, "/")+1:]
+		noExtName = noExtName[:strings.Index(noExtName, ".")]
+		// Se o arquivo nao está no mapa ou é um PNG
+		if uniqPages[noExtName] == "" {
+			uniqPages[noExtName] = imgURL
+		} else if strings.Contains(imgURL, noExtName+".png") {
+			old := uniqPages[noExtName]
+			uniqPages[noExtName] = imgURL
+			// Se nao for um numero já adiciona diretamente
+			_, err := strconv.Atoi(noExtName)
+			if err != nil {
+				urls = append(urls, imgURL)
+				for l := 0; l < len(imgURL); l++ {
+					if urls[l] == old {
+						urls = append(urls[:l], urls[l+1:]...)
+					}
+				}
+			}
+		}
 	})
+	for k := 1; k <= len(uniqPages); k++ {
+		if uniqPages[fmt.Sprintf("%02d", k)] != "" {
+			urls = append(urls, uniqPages[fmt.Sprintf("%02d", k)])
+		}
+	}
+	if paginas.Length() != len(urls) {
+		log.Printf("%d duplicadas encontradas e filtradas. %d paginas totais. \n",
+			(paginas.Length() - len(uniqPages)), len(urls))
+	}
 	return urls
 }
 

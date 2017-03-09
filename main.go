@@ -3,14 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"image/png"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-
-	"image/jpeg"
 
 	"github.com/samosaara/gomanga/providers"
 	"golang.org/x/image/webp"
@@ -126,9 +125,9 @@ func search(manga string, src providers.Provedor) {
 			for i, v := range results {
 				fmt.Printf("  - %02d) %s\n", i+1, v)
 			}
-			fmt.Printf("Especifique esse provedor com a opcao -site")
+			fmt.Printf("Especifique esse provedor com a opcao -site\n")
 		} else {
-			fmt.Printf("Nenhum mangá encontrado em %s\n", provid)
+			fmt.Printf("Nenhum mangá encontrado em %s\n\n", provid)
 		}
 	}
 }
@@ -198,8 +197,8 @@ func download() {
 
 		//Novos edge-cases de extensões diferenciadas podem ser adicionadas sem alterar muito do código
 		if originalExt == ".webp" {
-			destFilename += ".jpg"
-			fFile, isNew := createIfNotExists(destPath + ".jpg")
+			destFilename += ".png"
+			fFile, isNew := createIfNotExists(destPath + ".png")
 
 			if isNew {
 				img, err := http.Get(imgURL)
@@ -207,8 +206,9 @@ func download() {
 				log.Println("Página está em .webp baixando e convertendo antes de escrever ao disco.")
 				webpImg, err := webp.Decode(img.Body)
 				handle(err)
-				jpeg.Encode(fFile, webpImg, nil)
-				log.Printf("%s convertida para JPG e escrita no disco com sucesso. Iniciando download da prox. pagina.", destFilename)
+				png.Encode(fFile, webpImg)
+				log.Printf("%s convertida para PNG e escrita no disco com sucesso.", destFilename)
+				log.Println("Iniciando download da prox. pagina.")
 				img.Body.Close()
 				fFile.Close()
 				continue
@@ -233,7 +233,8 @@ func download() {
 			continue
 		}
 		if !isNew && !Substituir {
-			log.Printf("Arquivo %s já existe. Ignorando. Adicione -r para substituir.\n", destFilename)
+			log.Printf("Arquivo %s já existe. Ignorando.", destFilename)
+			log.Println("Adicione -r para substituir.")
 		}
 	}
 }
